@@ -21,6 +21,17 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
     private var intervalMs = 5000
     private var lastSendAt: TimeInterval = 0
 
+    // Arka planda da tamamlanan ağ istekleri için background URLSession.
+    // Normal URLSession.shared istekleri iOS tarafından arka planda askıya alınır.
+    private lazy var backgroundSession: URLSession = {
+        let config = URLSessionConfiguration.background(withIdentifier: "com.irtibat.ailetakibi.telegram")
+        config.sessionSendsLaunchEvents = true
+        config.isDiscretionary = false
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        return URLSession(configuration: config, delegate: nil, delegateQueue: nil)
+    }()
+
     override public func load() {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
@@ -89,14 +100,8 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
         let interval = max(Double(intervalMs) / 1000.0, 1.0)
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             guard let self = self, self.isTracking else { return }
-            let now = Date().timeIntervalSince1970
-            if (now - self.lastSendAt) >= interval {
-                if let loc = self.locationManager.location {
-                    self.lastSendAt = now
-                    let timestamp = Int(loc.timestamp.timeIntervalSince1970 * 1000)
-                    self.sendToTelegram(lat: loc.coordinate.latitude, lng: loc.coordinate.longitude, timestamp: timestamp)
-                }
-            }
+            // Arka planda GPS'i uyanık tutmak için taze konum iste
+            self.locationManager.requestLocation()
         }
         RunLoop.main.add(timer, forMode: .common)
         sendTimer = timer
@@ -180,9 +185,9 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
             "disable_web_page_preview": true
         ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        request.timeoutInterval = 15
 
-        let task = URLSession.shared.dataTask(with: request) { _, _, _ in }
+        // Background session: istek uygulama arka plandayken bile tamamlanır
+        let task = backgroundSession.dataTask(with: request)
         task.resume()
     }
 
