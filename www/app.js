@@ -174,8 +174,13 @@ function startWatch() {
 
   if (NATIVE_GEO) {
     stopWatch();
-    NATIVE_GEO.start().then(() => {
-      logEvent("native konum servisi başladı");
+    const settings = loadSettings();
+    NATIVE_GEO.start({
+      botToken: settings.botToken,
+      chatId: settings.chatId,
+      intervalMs: getIntervalMs()
+    }).then(() => {
+      logEvent("native konum servisi başladı (Telegram native'den gönderiliyor)");
     }).catch((err) => updateStatus("Native konum hatası: " + err.message));
 
     nativeListener = NATIVE_GEO.addListener("location", (data) => {
@@ -293,6 +298,14 @@ async function captureAndSend(reason) {
 
     await enqueue(payload);
     lastSentPosition = { lat: currentPosition.lat, lng: currentPosition.lng };
+
+    if (NATIVE_GEO) {
+      // Native ortamda Telegram gönderimini native taraf yapar (arka planda da çalışır).
+      // Burada sadece UI güncellenir, çift mesajı önlemek için JS göndermez.
+      updateStatus(`Native izliyor · son konum #${sendSeq} (${reason})`);
+      renderQueueCount();
+      return payload;
+    }
 
     try {
       await sendToTelegram(payload);
