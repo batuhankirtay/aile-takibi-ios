@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Şeffaf ve onay temelli aile konum takibi. Konumunuz Telegram üzerinden aile grubunuzla paylaşılır." />
+  <title>Aile Takibi</title>
+  <link rel="manifest" href="./manifest.json?v=2" />
+  <link rel="icon" type="image/png" href="./icons/icon-192.png?v=2" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=2" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Aile Takibi" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --accent: #22c55e;
+      --danger: #ef4444;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+    }
+    .container { width: 100%; max-width: 480px; }
+    header { text-align: center; margin-bottom: 24px; }
+    header h1 { font-size: 1.5rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    header .badge {
+      display: inline-block; background: rgba(34,197,94,.15); color: var(--accent);
+      border: 1px solid rgba(34,197,94,.4); border-radius: 999px;
+      padding: 2px 10px; font-size: .7rem; margin-top: 8px;
+    }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px; margin-bottom: 16px;
+    }
+    .card h2 { font-size: 1rem; margin-bottom: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .btn {
+      width: 100%; border: none; border-radius: 12px; padding: 16px;
+      font-size: 1.05rem; font-weight: 600; color: #fff; cursor: pointer;
+      transition: opacity .15s, transform .05s;
+    }
+    .btn:active { transform: scale(.98); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-start { background: var(--accent); margin-bottom: 12px; }
+    .btn-stop { background: var(--danger); }
+    .info-row {
+      display: flex; justify-content: space-between; gap: 12px;
+      padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: .9rem;
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-row span:first-child { color: var(--muted); }
+    #status { margin-top: 12px; font-size: .85rem; color: var(--muted); min-height: 1.2em; }
+    #queue-info { font-size: .8rem; color: var(--muted); margin-top: 6px; }
+    #running-indicator {
+      display: none; align-items: center; justify-content: center; gap: 8px;
+      background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.4);
+      border-radius: 12px; padding: 14px; margin-bottom: 16px; color: var(--accent); font-weight: 600;
+    }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%; background: var(--accent);
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .3; }
+    }
+    details summary {
+      cursor: pointer; font-weight: 600; color: var(--muted); font-size: .95rem;
+    }
+    label { display: block; font-size: .85rem; color: var(--muted); margin: 12px 0 4px; }
+    input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px; color: var(--text); font-size: .95rem;
+    }
+    input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .btn-save {
+      background: var(--accent); margin-top: 16px; padding: 12px;
+    }
+    .note {
+      font-size: .78rem; color: var(--muted); background: var(--bg);
+      border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-top: 16px;
+      line-height: 1.5;
+    }
+    footer { margin-top: auto; padding-top: 24px; text-align: center; font-size: .75rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📍 Aile Takibi</h1>
+      <span class="badge">Şeffaf · Onay Temelli</span>
+    </header>
+
+    <div id="running-indicator">
+      <span class="dot"></span>
+      <span id="running-text">Takip Aktif — konumunuz aile grubunuzla paylaşılıyor</span>
+    </div>
+
+    <div class="card">
+      <h2>Durum</h2>
+      <div class="info-row"><span>Pil</span><span id="battery-status">…</span></div>
+      <div class="info-row"><span>Bağlantı</span><span id="conn-status">…</span></div>
+      <div class="info-row"><span>Son konum</span><span id="last-location">yok</span></div>
+      <p id="status">Hazır.</p>
+      <p id="queue-info"></p>
+      <p id="tick-info" style="font-size:.8rem;color:var(--muted);margin-top:6px;"></p>
+      <p id="event-log" style="font-size:.75rem;color:var(--muted);margin-top:6px;line-height:1.4;"></p>
+    </div>
+
+    <div id="app-body">
+      <div class="card">
+        <h2>Konum Paylaşımı</h2>
+        <button id="btn-start" class="btn btn-start">Takip Başlat</button>
+        <p class="note">
+          "Takip Başlat"a basarak konumunuzun, cihazınızdaki bildirim çubuğunda görünür şekilde,
+          periyodik olarak Telegram grubunuza gönderilmesine onay veriyorsunuz. Bu uygulama casusluk değil,
+          aile güveni için şeffaf bir araçtır. İstediğiniz an "Takibi Durdur" ile kapatabilirsiniz.
+        </p>
+      </div>
+
+      <div class="card">
+        <details id="settings-panel">
+          <summary>⚙️ Telegram Ayarları</summary>
+          <form id="settings-form">
+            <label for="bot-token">Bot Token</label>
+            <input id="bot-token" type="password" placeholder="123456:ABC-DEF..." autocomplete="off" />
+            <label for="chat-id">Chat ID (Telegram)</label>
+            <input id="chat-id" type="text" placeholder="-1001234567890" autocomplete="off" />
+            <button type="submit" class="btn btn-save">Kaydet</button>
+          </form>
+          <p class="note">
+            Botu oluşturmak için Telegram'da @BotFather'a yazın, <b>/newbot</b> komutuyla bot oluşturun.
+            Chat ID'yi almak için botunuza bir mesaj atın ve <b>@userinfobot</b>'tan ID'nizi öğrenin.
+            Bot token'ınızı kimseyle paylaşmayın.
+          </p>
+        </details>
+      </div>
+    </div>
+
+    <button id="btn-stop" class="btn btn-stop" disabled>Takibi Durdur</button>
+
+    <footer>Aile Takibi v2.6 — konum verileri yalnızca Telegram botu üzerinden iletir.</footer>
+  </div>
+  <script src="./app.js?v=5"></script>
+</body>
+</html>

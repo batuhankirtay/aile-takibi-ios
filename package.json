@@ -1,0 +1,20 @@
+{
+  "name": "aile-takibi-native",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aile Takibi - native wrapper for background location tracking",
+  "scripts": {
+    "sync": "cap sync",
+    "ios:open": "cap open ios",
+    "android:open": "cap open android",
+    "build": "cap copy"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0"
+  }
+}

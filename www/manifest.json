@@ -1,0 +1,37 @@
+{
+  "name": "Aile Takibi - Family Tracker",
+  "short_name": "Aile Takibi",
+  "description": "Şeffaf ve onay temelli aile konum takibi. Konumunuz Telegram botu üzerinden aile grubunuzla paylaşılır.",
+  "lang": "tr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["family", "social", "utilities"],
+  "permissions": ["geolocation", "notifications"],
+  "share_target": {
+    "action": "./index.html",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AileTakibi</string>
+    <string name="title_activity_main">AileTakibi</string>
+    <string name="package_name">com.irtibat.ailetakibi</string>
+    <string name="custom_url_scheme">com.irtibat.ailetakibi</string>
+</resources>
