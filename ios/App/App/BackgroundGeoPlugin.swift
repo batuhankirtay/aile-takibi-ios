@@ -9,30 +9,29 @@ import UIKit
  * konum verilerini arka planda doğrudan Telegram'a gönderir.
  */
 @objc(BackgroundGeoPlugin)
-public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
+public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate, URLSessionDelegate {
 
     private let locationManager = CLLocationManager()
     private var isTracking = false
     private var pendingStartCall: CAPPluginCall?
     private var sendTimer: Timer?
+    private var backgroundSession: URLSession?
+    private var backgroundCompletionHandler: (() -> Void)?
 
     private var botToken = ""
     private var chatId = ""
     private var intervalMs = 5000
     private var lastSendAt: TimeInterval = 0
 
-    // Arka planda da tamamlanan ağ istekleri için background URLSession.
-    // Normal URLSession.shared istekleri iOS tarafından arka planda askıya alınır.
-    private lazy var backgroundSession: URLSession = {
+    override public func load() {
+        // Background URLSession: delegate ile tutulur, arka planda tamamlanır
         let config = URLSessionConfiguration.background(withIdentifier: "com.irtibat.ailetakibi.telegram")
         config.sessionSendsLaunchEvents = true
         config.isDiscretionary = false
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
-        return URLSession(configuration: config, delegate: nil, delegateQueue: nil)
-    }()
+        backgroundSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
 
-    override public func load() {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.distanceFilter = kCLDistanceFilterNone
@@ -88,20 +87,20 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
     private func beginTracking() {
         isTracking = true
         lastSendAt = 0
+        // Sürekli konum akışı: uygulamayı arka planda uyanık tutar
         locationManager.startUpdatingLocation()
-        locationManager.requestLocation()
         startSendTimer()
     }
 
-    // Konum güncellemesi gelmese bile (hareketsiz cihaz) son bilinen konumu
-    // düzenli aralıklarla gönderir. Arka planda da çalışır.
+    // Timer: konum güncellemesi gelmese bile son bilinen konumu gönderir
     private func startSendTimer() {
         sendTimer?.invalidate()
         let interval = max(Double(intervalMs) / 1000.0, 1.0)
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             guard let self = self, self.isTracking else { return }
-            // Arka planda GPS'i uyanık tutmak için taze konum iste
-            self.locationManager.requestLocation()
+            if let loc = self.locationManager.location {
+                self.sendLocation(loc)
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         sendTimer = timer
@@ -119,14 +118,7 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
             "timestamp": timestamp
         ]
         notifyListeners("location", data: payload)
-
-        // Aralık dolmuşsa arka planda da Telegram'a gönder
-        let now = Date().timeIntervalSince1970
-        let interval = Double(intervalMs) / 1000.0
-        if isTracking && (now - lastSendAt) >= interval {
-            lastSendAt = now
-            sendToTelegram(lat: loc.coordinate.latitude, lng: loc.coordinate.longitude, timestamp: timestamp)
-        }
+        sendLocation(loc)
     }
 
     public func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
@@ -153,6 +145,16 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
         }
     }
 
+    private func sendLocation(_ loc: CLLocation) {
+        guard isTracking else { return }
+        let now = Date().timeIntervalSince1970
+        let interval = Double(intervalMs) / 1000.0
+        guard (now - lastSendAt) >= interval else { return }
+        lastSendAt = now
+        let timestamp = Int(loc.timestamp.timeIntervalSince1970 * 1000)
+        sendToTelegram(lat: loc.coordinate.latitude, lng: loc.coordinate.longitude, timestamp: timestamp)
+    }
+
     // MARK: - Telegram gönderimi (native, arka planda çalışır)
 
     private func batteryInfo() -> (level: Int, charging: Bool) {
@@ -162,7 +164,7 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
     }
 
     private func sendToTelegram(lat: Double, lng: Double, timestamp: Int) {
-        guard !botToken.isEmpty, !chatId.isEmpty else { return }
+        guard !botToken.isEmpty, !chatId.isEmpty, let session = backgroundSession else { return }
 
         let battery = batteryInfo()
         let dateStr = dateString(from: timestamp)
@@ -186,8 +188,7 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
         ]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
-        // Background session: istek uygulama arka plandayken bile tamamlanır
-        let task = backgroundSession.dataTask(with: request)
+        let task = session.dataTask(with: request)
         task.resume()
     }
 
@@ -197,5 +198,21 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
         formatter.locale = Locale(identifier: "tr_TR")
         formatter.dateFormat = "dd.MM.yyyy HH:mm:ss"
         return formatter.string(from: date)
+    }
+
+    // MARK: - URLSessionDelegate (background session tamamlanması)
+
+    public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        // Hata durumunda sessizce geç; bir sonraki aralıkta yeni gönderim dener
+        if let error = error {
+            NSLog("AileTakibi Telegram gönderim hatası: %@", error.localizedDescription)
+        }
+    }
+
+    public func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        DispatchQueue.main.async {
+            self.backgroundCompletionHandler?()
+            self.backgroundCompletionHandler = nil
+        }
     }
 }
