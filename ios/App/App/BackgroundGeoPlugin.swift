@@ -14,6 +14,7 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
     private let locationManager = CLLocationManager()
     private var isTracking = false
     private var pendingStartCall: CAPPluginCall?
+    private var sendTimer: Timer?
 
     private var botToken = ""
     private var chatId = ""
@@ -55,6 +56,8 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
 
     @objc func stop(_ call: CAPPluginCall) {
         isTracking = false
+        sendTimer?.invalidate()
+        sendTimer = nil
         locationManager.stopUpdatingLocation()
         call.resolve(["stopped": true])
     }
@@ -76,6 +79,27 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate {
         lastSendAt = 0
         locationManager.startUpdatingLocation()
         locationManager.requestLocation()
+        startSendTimer()
+    }
+
+    // Konum güncellemesi gelmese bile (hareketsiz cihaz) son bilinen konumu
+    // düzenli aralıklarla gönderir. Arka planda da çalışır.
+    private func startSendTimer() {
+        sendTimer?.invalidate()
+        let interval = max(Double(intervalMs) / 1000.0, 1.0)
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self = self, self.isTracking else { return }
+            let now = Date().timeIntervalSince1970
+            if (now - self.lastSendAt) >= interval {
+                if let loc = self.locationManager.location {
+                    self.lastSendAt = now
+                    let timestamp = Int(loc.timestamp.timeIntervalSince1970 * 1000)
+                    self.sendToTelegram(lat: loc.coordinate.latitude, lng: loc.coordinate.longitude, timestamp: timestamp)
+                }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        sendTimer = timer
     }
 
     // MARK: - CLLocationManagerDelegate
