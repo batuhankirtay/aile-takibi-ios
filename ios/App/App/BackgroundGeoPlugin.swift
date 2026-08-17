@@ -68,7 +68,11 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate, URLSessi
         isTracking = false
         sendTimer?.invalidate()
         sendTimer = nil
+        backgroundKeepAliveTimer?.invalidate()
+        backgroundKeepAliveTimer = nil
+        endBackgroundTask()
         locationManager.stopUpdatingLocation()
+        locationManager.stopMonitoringSignificantLocationChanges()
         call.resolve(["stopped": true])
     }
 
@@ -89,7 +93,39 @@ public class BackgroundGeoPlugin: CAPPlugin, CLLocationManagerDelegate, URLSessi
         lastSendAt = 0
         // Sürekli konum akışı: uygulamayı arka planda uyanık tutar
         locationManager.startUpdatingLocation()
+        // Hareket tespiti: uygulama askıya alınsa bile cihaz hareket edince uyandırır
+        locationManager.startMonitoringSignificantLocationChanges()
         startSendTimer()
+        startBackgroundKeepAlive()
+    }
+
+    // Arka planda iOS'un uygulamayı uyutmasını geciktirir (beginBackgroundTask)
+    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+
+    private func startBackgroundKeepAlive() {
+        // Her gönderimde yeni bir background task başlat, süresi dolunca yenile
+        let interval = max(Double(intervalMs) / 1000.0, 1.0)
+        let keepAlive = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self = self, self.isTracking else { return }
+            if self.backgroundTask == .invalid {
+                self.backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "aile-takibi-keepalive") {
+                    self.endBackgroundTask()
+                }
+            }
+            // Timer'ı canlı tutmak için uygulamanın aktif kalma süresini uzat
+            UIApplication.shared.setMinimumBackgroundFetchInterval(interval)
+        }
+        RunLoop.main.add(keepAlive, forMode: .common)
+        backgroundKeepAliveTimer = keepAlive
+    }
+
+    private var backgroundKeepAliveTimer: Timer?
+
+    private func endBackgroundTask() {
+        if backgroundTask != .invalid {
+            UIApplication.shared.endBackgroundTask(backgroundTask)
+            backgroundTask = .invalid
+        }
     }
 
     // Timer: konum güncellemesi gelmese bile son bilinen konumu gönderir
