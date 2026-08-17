@@ -37,19 +37,30 @@ function loadSettings() {
       botToken: saved.botToken || defaults.botToken,
       chatId: saved.chatId || defaults.chatId
     };
-  } catch {
+  } catch (e) {
+    console.warn("localStorage okunamadı:", e);
     return defaults;
   }
 }
 
 function saveSettings(settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    return true;
+  } catch (e) {
+    console.warn("localStorage yazılamadı:", e);
+    return false;
+  }
 }
 
 function pushSettingsToSW() {
   const settings = loadSettings();
-  if (navigator.serviceWorker.controller) {
-    navigator.serviceWorker.controller.postMessage({ type: "SET_SETTINGS", settings });
+  if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+    try {
+      navigator.serviceWorker.controller.postMessage({ type: "SET_SETTINGS", settings });
+    } catch (e) {
+      console.warn("SW'ye ayar gönderilemedi:", e);
+    }
   }
 }
 
@@ -434,11 +445,13 @@ async function registerSW() {
   }
 }
 
-navigator.serviceWorker.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "GET_SETTINGS") {
-    navigator.serviceWorker.controller.postMessage({ type: "SET_SETTINGS", settings: loadSettings() });
-  }
-});
+if (navigator.serviceWorker) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data && event.data.type === "GET_SETTINGS") {
+      navigator.serviceWorker.controller.postMessage({ type: "SET_SETTINGS", settings: loadSettings() });
+    }
+  });
+}
 
 // ---------- UI / Durum ----------
 function updateStatus(text) {
@@ -506,13 +519,19 @@ function initSettings() {
 
   $("settings-form").addEventListener("submit", (e) => {
     e.preventDefault();
-    saveSettings({
+    const saved = {
       botToken: $("bot-token").value.trim(),
       chatId: $("chat-id").value.trim()
-    });
+    };
+    const ok = saveSettings(saved);
     pushSettingsToSW();
-    $("settings-panel").open = false;
-    updateStatus("Ayarlar kaydedildi.");
+    // Kaydedilen değerleri hemen forma geri yaz (kalıcılık kanıtı)
+    $("bot-token").value = saved.botToken;
+    $("chat-id").value = saved.chatId;
+    $("settings-panel").open = true;
+    updateStatus(ok
+      ? "Ayarlar kaydedildi ✓ (Telegram'a gönderim için Takip Başlat'a basın)"
+      : "Kaydedilemedi! Tarayıcı depolama engellenmiş olabilir.");
   });
 }
 
